@@ -146,14 +146,16 @@ for n in range(n_epochs):
             pred_lab_s,pred_dom_s,emb_lab_s, emb_dom_s, pred_lab_t,pred_dom_t,emb_lab_t, emb_dom_t = model(x_batch_s, m_batch_s,x_batch_t, m_batch_t)
             pred_arg = torch.tensor([ torch.argmax(pred_lab_t[k]) for k in range(len(pred_lab_t))])
             unique_labels = torch.unique(pred_arg)
-            i_ul = [k for k in range(len(y_batch_t)) if y_batch_t[k] == -1  ]
-            i_l = [ k for k in range(len(y_batch_t)) if y_batch_t[k] != -1]
-            y_ul = torch.tensor([torch.argmax(pred_lab_t[k]) if max(F.softmax(pred_lab_t[k]))>tau and y_batch_t[k] == -1  else torch.tensor(-1) for k in i_ul  ], dtype =torch.int32)
+            i_ul = torch.where(y_batch_t == -1)
+            i_l = torch.where(y_batch_t != -1) 
+            max_prob, y_ul = torch.max(F.softmax(pred_lab_t,dim=1), dim=1)
+            y_ul[max_prob<tau] = -1
             
             xl_batch,ml_batch, doml_batch = x_batch_t[i_l],m_batch_t[i_l],dom_batch_t[i_l]
             yl_batch = y_batch_t[i_l].clone().detach()
-          
-            label_seuil = torch.tensor([l  for l in y_batch_t if l!=torch.tensor(-1)],dtype=torch.int32)
+
+            label_seuil = y_ul[torch.where(y_ul != -1)]
+            
             lb_seuil ,counts = torch.unique(label_seuil, return_counts = True)
             lb_seuil,counts = lb_seuil, counts
             
@@ -170,7 +172,9 @@ for n in range(n_epochs):
                 else :
                     seuil_classe[lab] = tau*1/2
             
-            yul_batch = [torch.argmax(pred_lab_t[k]) if max(F.softmax(pred_lab_t[k]))>seuil_classe[torch.argmax(pred_lab_t[k]).item()] else torch.tensor(-1) for k in i_ul]
+            max_prob_b, yul_batch = torch.max(F.softmax(pred_lab_t[i_ul],dim=1), dim=1)
+            yul_batch[max_prob_b < seuil_classe] = -1
+            [torch.argmax(pred_lab_t[k]) if max(F.softmax(pred_lab_t[k]))>seuil_classe[torch.argmax(pred_lab_t[k]).item()] else torch.tensor(-1) for k in i_ul]
             
     
     
@@ -183,7 +187,7 @@ for n in range(n_epochs):
             
                                                                             
                                                                                                                 # non labélisées
-            ind_loss_pl = [k for k in range(len(yul_batch)) if yul_batch[k] != torch.tensor(-1) ]                 # indices des pseudo-labels conservés
+            ind_loss_pl = torch.where(yul_batch != -1)               # indices des pseudo-labels conservés
             count_thr.append(ind_loss_pl)
             #hehe = [torch.argmax(pred_lab[k]) for k in range (len(pred_lab_t))]
            # pred_count.append(hehe)
@@ -212,7 +216,7 @@ for n in range(n_epochs):
             y_batch_t = torch.cat((yl_batch,yul_batch),axis=0)
             m_batch_t = torch.cat((ml_batch,mul_batch),axis=0) 
             dom_batch_t = torch.cat((doml_batch,domul_batch),axis=0) 
-            ind_loss = [k for k in range(len(y_batch_t)) if y_batch_t[k] != torch.tensor(-1) ] # ici on ne conserve que les éléments pour lesquels on a un label 
+            ind_loss = torch.where(y_batch_t != -1)  # ici on ne conserve que les éléments pour lesquels on a un label 
                                                                                                             #ou un pseudo label de confiance
             #ind_loss_l =  [k for k in range(len(y_batch)) if y_batch[k] != torch.tensor(-1) and k < nbr_lb ] # les indices pour la loss des labélisés
             #ind_loss_ul =  [k for k in range(len(y_batch)) if y_batch[k] != torch.tensor(-1) and k > nbr_lb ] # les indices pour la loss des pseudo-labélisés
